@@ -1,22 +1,61 @@
 # ==============================================================================
-# SISTEMA DE GESTIÓN DE BIBLIOTECA
-# ==============================================================================
-# CONCEPTOS APLICADOS:
-# 1. LISTAS (`List`): La lista principal `libros` y la lista `categorias` de cada libro.
-# 2. TUPLAS (`Tuple`): Para estados de retorno `{:ok, datos}` y `{:error, mensaje}`.
-# 3. MAPAS (`Map`): La estructura de cada libro `%{id: ..., titulo: ..., ...}`.
-# 4. MÓDULO `Enum` (CRUD Completo):
-#    - Enum.find/2   -> READ (Buscar libro por ID)
-#    - Enum.each/2   -> READ (Listar libros)
-#    - Enum.filter/2 -> READ (Filtrar por libros disponibles)
-#    - Enum.map/2    -> UPDATE (Actualizar estado de préstamo)
-#    - Enum.reject/2 -> DELETE (Eliminar libro de la lista)
+# SISTEMA DE GESTIÓN DE BIBLIOTECA CON PERSISTENCIA DE DATOS
 # ==============================================================================
 
 defmodule Biblioteca do
   @moduledoc """
   Modulo principal de la biblioteca para la gestion del catalogo.
+  Incluye persistencia en disco mediante archivos binarios de Erlang.
   """
+
+  @archivo "biblioteca.dat"
+
+  # ----------------------------------------------------------------------------
+  # PERSISTENCIA EN DISCO
+  # ----------------------------------------------------------------------------
+  defp guardar_datos(libros) do
+    case File.write(@archivo, :erlang.term_to_binary(libros)) do
+      :ok -> :ok
+      {:error, razon} -> Util.mostrar_error("Error al guardar en disco: #{razon}")
+    end
+  end
+
+  defp cargar_datos do
+    if File.exists?(@archivo) do
+      case File.read(@archivo) do
+        {:ok, contenido} ->
+          try do
+            :erlang.binary_to_term(contenido)
+          rescue
+            _ -> libros_iniciales()
+          end
+
+        {:error, _} ->
+          libros_iniciales()
+      end
+    else
+      libros_iniciales()
+    end
+  end
+
+  defp libros_iniciales do
+    [
+      %{
+        id: 1,
+        titulo: "Cien Anos de Soledad",
+        autor: "Gabriel Garcia Marquez",
+        categorias: ["Realismo Magico", "Novela"],
+        prestado: false
+      },
+      %{
+        id: 2,
+        titulo: "El Principito",
+        autor: "Antoine de Saint-Exupery",
+        categorias: ["Fabula", "Infantil"],
+        prestado: true
+      }
+    ]
+  end
 
   # ----------------------------------------------------------------------------
   # 1. CREATE: Agregar nuevo libro a la lista
@@ -133,23 +172,7 @@ defmodule Biblioteca do
   # INTERFAZ Y BUCLE RECURSIVO
   # ----------------------------------------------------------------------------
   def iniciar do
-    libros_iniciales = [
-      %{
-        id: 1,
-        titulo: "Cien Anos de Soledad",
-        autor: "Gabriel Garcia Marquez",
-        categorias: ["Realismo Magico", "Novela"],
-        prestado: false
-      },
-      %{
-        id: 2,
-        titulo: "El Principito",
-        autor: "Antoine de Saint-Exupery",
-        categorias: ["Fabula", "Infantil"],
-        prestado: true
-      }
-    ]
-
+    libros_iniciales = cargar_datos()
     loop(libros_iniciales)
   end
 
@@ -201,6 +224,7 @@ defmodule Biblioteca do
 
         case agregar_libro(libros, id, titulo, autor, categorias) do
           {:ok, nueva_lista} ->
+            guardar_datos(nueva_lista)
             Util.mostrar_mensaje("Libro registrado con exito.")
             loop(nueva_lista)
 
@@ -220,6 +244,7 @@ defmodule Biblioteca do
             categorias = String.split(texto_categorias, ",") |> Enum.map(&String.trim/1)
 
             {:ok, nueva_lista} = actualizar_libro(libros, id, titulo, autor, categorias)
+            guardar_datos(nueva_lista)
             Util.mostrar_mensaje("Libro actualizado con exito.")
             loop(nueva_lista)
 
@@ -235,6 +260,7 @@ defmodule Biblioteca do
           {:ok, libro} ->
             nuevo_estado = !libro.prestado
             {:ok, nueva_lista} = cambiar_estado_prestamo(libros, id, nuevo_estado)
+            guardar_datos(nueva_lista)
             mensaje_estado = if nuevo_estado, do: "marcado como PRESTADO", else: "marcado como DISPONIBLE"
             Util.mostrar_mensaje("El libro \"#{libro.titulo}\" ahora esta #{mensaje_estado}.")
             loop(nueva_lista)
@@ -249,6 +275,7 @@ defmodule Biblioteca do
 
         case eliminar_libro(libros, id) do
           {:ok, nueva_lista} ->
+            guardar_datos(nueva_lista)
             Util.mostrar_mensaje("Libro eliminado correctamente.")
             loop(nueva_lista)
 
